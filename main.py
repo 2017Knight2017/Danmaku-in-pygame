@@ -1,6 +1,10 @@
 from moving_objects import *
 from side_bar import Sidebar
 
+def normalize_coords(x: int, y: int) -> tuple[int, int]:
+    return x + 239, y + 19
+
+
 # 384x448
 pygame.init()
 mainsurf = pygame.display.set_mode((640, 480))
@@ -24,12 +28,13 @@ while True:
     keys = pygame.key.get_pressed()
     if keys[pygame.K_g]:
         if curtime - l > 100:
-            enemy_bullets.add(EnemyBullet.hedgehog_init((4, 16, 32), (420, 240), (20, 15, 10), (0,), assignation_pos=plr.sprite.rect.center))
+            enemies_group.add(Enemy(lambda x: Vector2(0, 1).rotate(sin(x) * 50), 2, *normalize_coords(200, 20)))
             l = curtime
 
     enemy_bullets.draw(mainsurf)
     enemy_bullets.update()
     enemies_group.draw(mainsurf)
+    enemies_group.update()
     player_bullets.draw(mainsurf)
     player_bullets.update()
     plr.draw(mainsurf)

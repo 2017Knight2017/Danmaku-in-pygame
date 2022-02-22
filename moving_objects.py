@@ -20,11 +20,11 @@ class EnemyBullet(Gameobject):
         self.movement_type = movement_type
         self.params = kwargs
         self.pos = pygame.math.Vector2()
-        self.__lifetime = 0
+        self.__lifetime = 0.1
         self.radius = int(min(self.rect.height, self.rect.width) * 0.8)
 
     @staticmethod
-    def hedgehog_init(density: tuple | int, center: (int, int),
+    def hedgehog_init(init_pos: (int, int), density: tuple | int,
                       speeds: tuple, shift: tuple, assignation_pos: (int, int) = None):
         res = []
         for i in range(len(speeds)):
@@ -33,39 +33,37 @@ class EnemyBullet(Gameobject):
                 case (tuple(), tuple(), None):
                     arr.extend([Vector2(0, 1).rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift[i]])
                 case (tuple(), tuple(), _):
-                    arr.extend([(Vector2(assignation_pos) - Vector2(center)).normalize().rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift[i]])
+                    arr.extend([(Vector2(assignation_pos) - Vector2(init_pos)).normalize().rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift[i]])
                 case (tuple(), int(), None):
                     arr.extend([Vector2(0, 1).rotate(j + 360 / density * k) for k in range(density) for j in shift[i]])
                 case (tuple(), int(), _):
-                    arr.extend([(Vector2(assignation_pos) - Vector2(center)).normalize().rotate(j + 360 / density * k) for k in range(density) for j in shift[i]])
+                    arr.extend([(Vector2(assignation_pos) - Vector2(init_pos)).normalize().rotate(j + 360 / density * k) for k in range(density) for j in shift[i]])
                 case (int(), tuple(), None):
                     arr.extend([Vector2(0, 1).rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift])
                 case (int(), tuple(), _):
-                    arr.extend([(Vector2(assignation_pos) - Vector2(center)).normalize().rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift])
+                    arr.extend([(Vector2(assignation_pos) - Vector2(init_pos)).normalize().rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift])
                 case (int(), int(), None):
                     arr.extend([Vector2(0, 1).rotate(j + 360 / density * k) for k in range(density) for j in shift])
                 case (int(), int(), _):
-                    arr.extend([(Vector2(assignation_pos) - Vector2(center)).normalize().rotate(j + 360 / density * k) for k in range(density) for j in shift])
+                    arr.extend([(Vector2(assignation_pos) - Vector2(init_pos)).normalize().rotate(j + 360 / density * k) for k in range(density) for j in shift])
             for j in arr:
-                res.append(EnemyBullet("hedgehog", center=center, vec=j, speed=speeds[i]))
+                res.append(EnemyBullet("hedgehog", init_pos=init_pos, vec=j, speed=speeds[i]))
         return res
 
+    @staticmethod
+    def wave_init(init_pos: tuple[int, int], speed: float, spread: float, init_angle: float = 0, assignation_pos: (int, int) = None):
+        return [EnemyBullet("wave", init_pos=init_pos, vec=(Vector2(assignation_pos) - Vector2(init_pos)).normalize(), speed=speed, spread=spread, init_angle=init_angle)]
+
     def hedgehog(self):
-        self.rect.center = self.params["center"] + self.params["vec"].normalize() * self.params["speed"] * self.__lifetime
+        self.rect.center = self.params["init_pos"] + self.params["vec"].normalize() * self.params["speed"] * self.__lifetime
 
-    def horizontal_wave(self):
-        self.rect.y = round(sin(self.__lifetime/self.params["vertical_speed"]) * self.params["spread"]) + self.params["center"]
-        self.rect.x += self.params["horizontal_speed"]
-
-    def vertical_wave(self):
-        self.rect.y += self.params["vertical_speed"]
-        self.rect.x = round(sin(self.__lifetime/self.params["horizontal_speed"]) * self.params["spread"]) + self.params["center"]
+    def wave(self):
+        self.rect.center = self.params["init_pos"] + self.params["vec"].rotate(sin(self.__lifetime + self.params["init_angle"]) * self.params["spread"]/self.__lifetime) * self.params["speed"] * self.__lifetime
 
     def update(self):
         match self.movement_type:
-            case "vertical_wave": self.vertical_wave()
-            case "horizontal_wave": self.horizontal_wave()
             case "hedgehog": self.hedgehog()
+            case "wave": self.wave()
         if (self.rect.x >= 640 or self.rect.y >= 480) or (self.rect.x <= 230 or self.rect.y <= 0):
             self.kill()
         self.__lifetime += 0.1
@@ -142,5 +140,19 @@ class Player(Gameobject):
 
 
 class Enemy(Gameobject):
-    def __init__(self, x: int, y: int):
+    def __init__(self, movement_function, speed: float, x: int, y: int):
+        self.true_coords = [x, y]
+        self.__lifetime = 0.1
+        self.speed = speed
+        self.movement_function = movement_function
         super().__init__(x, y, "img/enemy.png")
+
+    def shoot(self, movement_type: str, **kwargs) -> list:
+        return [EnemyBullet(movement_type, init_pos=self.rect.center, **kwargs)]
+
+    def update(self):
+        self.true_coords = [self.true_coords[i] + elem for i, elem in enumerate(self.movement_function(self.__lifetime).normalize()*self.speed)]
+        self.rect.center = self.true_coords
+        if (self.rect.x >= 640 or self.rect.y >= 480) or (self.rect.x <= 230 or self.rect.y <= 0):
+            self.kill()
+        self.__lifetime += 0.1
