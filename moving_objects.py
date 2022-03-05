@@ -1,6 +1,8 @@
 import pygame
 from pygame.math import Vector2
 from math import sin
+import re
+import typing
 
 
 class Gameobject(pygame.sprite.Sprite):
@@ -16,10 +18,13 @@ class Gameobject(pygame.sprite.Sprite):
 
 class EnemyBullet(Gameobject):
     def __init__(self, movement_type: str, **kwargs):
-        super().__init__(0, 0, "img/enemy_bullet.png")
+        super().__init__(*kwargs["init_pos"], "img/enemy_bullet.png")
         self.movement_type = movement_type
         self.params = kwargs
-        self.pos = pygame.math.Vector2()
+        if "init_speed_func" not in self.params: self.params["init_speed_func"] = lambda x: 0
+        self.key_moments = {float(key[6:].replace("_", ".")): value for key, value in self.params.items() if re.match(r"after_[0-9]*_[0-9]*", key)}
+        self.key_moments_keylist = sorted(self.key_moments.keys())
+        self.true_coords = Vector2(self.params["init_pos"])
         self.__lifetime = 0.1
         self.radius = int(min(self.rect.height, self.rect.width) * 0.8)
 
@@ -55,15 +60,40 @@ class EnemyBullet(Gameobject):
         return [EnemyBullet("wave", init_pos=init_pos, vec=(Vector2(assignation_pos) - Vector2(init_pos)).normalize(), speed=speed, spread=spread, init_angle=init_angle)]
 
     def hedgehog(self):
-        self.rect.center = self.params["init_pos"] + self.params["vec"].normalize() * self.params["speed"] * self.__lifetime
+        self.params["vec"].normalize_ip()
+        if self.key_moments:
+            if self.__lifetime < self.key_moments_keylist[0]:
+                self.true_coords += self.params["vec"] * (self.params["speed"] + self.params["init_speed_func"](self.__lifetime))
+            elif self.__lifetime > self.key_moments_keylist[-1]:
+                self.true_coords += self.params["vec"] * (self.params["speed"] + self.key_moments[self.key_moments_keylist[-1]](self.__lifetime))
+            else:
+                for i in range(1, len(self.key_moments)):
+                    if self.key_moments_keylist[i - 1] < self.__lifetime < self.key_moments_keylist[i]:
+                        self.true_coords += self.params["vec"] * (self.params["speed"] + self.key_moments[self.key_moments_keylist[i-1]](self.__lifetime))
+                        break
+        else:
+            self.true_coords += self.params["vec"].normalize() * (self.params["speed"] + self.params["init_speed_func"](self.__lifetime))
 
     def wave(self):
-        self.rect.center = self.params["init_pos"] + self.params["vec"].rotate(sin(self.__lifetime + self.params["init_angle"]) * self.params["spread"]/self.__lifetime) * self.params["speed"] * self.__lifetime
+        if self.key_moments:
+            if self.__lifetime < self.key_moments_keylist[0]:
+                self.true_coords += self.params["vec"].rotate(sin(self.__lifetime + self.params["init_angle"]) * self.params["spread"]/self.__lifetime) * (self.params["speed"] + self.params["init_speed_func"](self.__lifetime))
+            elif self.__lifetime > self.key_moments_keylist[-1]:
+                self.true_coords += self.params["vec"].rotate(sin(self.__lifetime + self.params["init_angle"]) * self.params["spread"] / self.__lifetime) * (self.params["speed"] + self.key_moments[self.key_moments_keylist[-1]](self.__lifetime))
+            else:
+                for i in range(1, len(self.key_moments)):
+                    if self.key_moments_keylist[i-1] < self.__lifetime < self.key_moments_keylist[i]:
+                        self.true_coords += self.params["vec"].rotate(sin(self.__lifetime + self.params["init_angle"]) * self.params["spread"] / self.__lifetime) * (self.params["speed"] + self.key_moments[self.key_moments_keylist[i-1]](self.__lifetime))
+                        break
+        else:
+            self.true_coords += self.params["vec"].rotate(sin(self.__lifetime + self.params["init_angle"]) * self.params["spread"] / self.__lifetime) * (self.params["speed"] + self.params["init_speed_func"](self.__lifetime))
+
 
     def update(self):
         match self.movement_type:
             case "hedgehog": self.hedgehog()
             case "wave": self.wave()
+        self.rect.center = self.true_coords
         if (self.rect.x >= 640 or self.rect.y >= 480) or (self.rect.x <= 230 or self.rect.y <= 0):
             self.kill()
         self.__lifetime += 0.1
@@ -140,7 +170,7 @@ class Player(Gameobject):
 
 
 class Enemy(Gameobject):
-    def __init__(self, movement_function, speed: float, x: int, y: int):
+    def __init__(self, movement_function: typing.Callable[[float], Vector2], speed: float, x: int, y: int):
         self.true_coords = [x, y]
         self.__lifetime = 0.1
         self.speed = speed
