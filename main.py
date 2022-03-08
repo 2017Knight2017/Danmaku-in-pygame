@@ -2,10 +2,6 @@ from moving_objects import *
 from side_bar import Sidebar
 
 
-def normalize_coords(x: int, y: int) -> tuple[int, int]:
-    return x + 239, y + 19
-
-
 # 384x448
 pygame.init()
 mainsurf = pygame.display.set_mode((640, 480))
@@ -29,18 +25,11 @@ while True:
     keys = pygame.key.get_pressed()
     if keys[pygame.K_g]:
         if curtime - l > 100:
-            enemy_bullets.add(EnemyBullet("hedgehog", init_pos=normalize_coords(200, 200),
-                                          vec=Vector2(0, 1).rotate(curtime/10),
-                                          speed=3, after_4_0=lambda x: -x/2, after_7_0=lambda x: x/3))
-            enemy_bullets.add(EnemyBullet("hedgehog", init_pos=normalize_coords(200, 200),
-                                          vec=Vector2(0, -1).rotate(curtime / 10),
-                                          speed=3, after_4_0=lambda x: -x/2, after_7_0=lambda x: x/3))
-            enemy_bullets.add(EnemyBullet("hedgehog", init_pos=normalize_coords(200, 200),
-                                          vec=Vector2(1, 0).rotate(curtime / 10),
-                                          speed=3, after_4_0=lambda x: -x/2, after_7_0=lambda x: x/3))
-            enemy_bullets.add(EnemyBullet("hedgehog", init_pos=normalize_coords(200, 200),
-                                          vec=Vector2(-1, 0).rotate(curtime / 10),
-                                          speed=3, after_4_0=lambda x: -x/2, after_7_0=lambda x: x/3))
+            enemy_bullets.add(EnemyBullet.hedgehog_init(
+                init_pos=(192, 200),
+                density=4,
+                speeds=[3],
+                assign=plr.sprite.rect.center))
             l = curtime
 
     enemy_bullets.draw(mainsurf)

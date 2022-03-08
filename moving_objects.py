@@ -1,8 +1,10 @@
 import pygame
+from typing import Callable
 from pygame.math import Vector2
-from math import sin
-import re
-import typing
+
+
+def normalize_coords(x: int, y: int) -> tuple[int, int]:
+    return x + 239, y + 19
 
 
 class Gameobject(pygame.sprite.Sprite):
@@ -18,81 +20,79 @@ class Gameobject(pygame.sprite.Sprite):
 
 class EnemyBullet(Gameobject):
     def __init__(self, movement_type: str, **kwargs):
-        super().__init__(*kwargs["init_pos"], "img/enemy_bullet.png")
         self.movement_type = movement_type
         self.params = kwargs
-        if "init_speed_func" not in self.params: self.params["init_speed_func"] = lambda x: 0
-        self.key_moments = {float(key[6:].replace("_", ".")): value for key, value in self.params.items() if re.match(r"after_[0-9]*_[0-9]*", key)}
-        self.key_moments_keylist = sorted(self.key_moments.keys())
+        self.params["init_pos"] = normalize_coords(*self.params["init_pos"])
+        if "speed_script" not in self.params: self.params["speed_script"] = {}
+        if "vec_script" not in self.params: self.params["vec_script"] = {}
+        self.params["speed_script"][0.0] = lambda x: 0
+        self.params["vec_script"][0.0] = lambda x, t: x
+        self.speed_script_keylist = sorted(self.params["speed_script"].keys())
+        self.vec_script_keylist = sorted(self.params["vec_script"].keys())
         self.true_coords = Vector2(self.params["init_pos"])
         self.__lifetime = 0.1
+        super().__init__(*self.params["init_pos"], "img/enemy_bullet.png")
         self.radius = int(min(self.rect.height, self.rect.width) * 0.8)
 
     @staticmethod
-    def hedgehog_init(init_pos: (int, int), density: tuple | int,
-                      speeds: tuple, shift: tuple, assignation_pos: (int, int) = None):
+    def hedgehog_init(init_pos: tuple[int, int], density: list[int] | int,
+                      speeds: list[float], shift: list[list[float]] | list[float] = [0],
+                      speed_script: dict[float, Callable[[float], float]] = {},
+                      vec_script: dict[float, Callable[[Vector2], Vector2]] = {},
+                      assign: tuple[int, int] = None):
         res = []
         for i in range(len(speeds)):
             arr = []
-            match (shift[0], density, assignation_pos):
-                case (tuple(), tuple(), None):
+            match (shift[0], density, assign):
+                case (list(), list(), None):
                     arr.extend([Vector2(0, 1).rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift[i]])
-                case (tuple(), tuple(), _):
-                    arr.extend([(Vector2(assignation_pos) - Vector2(init_pos)).normalize().rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift[i]])
-                case (tuple(), int(), None):
+                case (list(), list(), _):
+                    arr.extend([(Vector2(assign) - Vector2(normalize_coords(*init_pos))).normalize().rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift[i]])
+                case (list(), int(), None):
                     arr.extend([Vector2(0, 1).rotate(j + 360 / density * k) for k in range(density) for j in shift[i]])
-                case (tuple(), int(), _):
-                    arr.extend([(Vector2(assignation_pos) - Vector2(init_pos)).normalize().rotate(j + 360 / density * k) for k in range(density) for j in shift[i]])
-                case (int(), tuple(), None):
+                case (list(), int(), _):
+                    arr.extend([(Vector2(assign) - Vector2(normalize_coords(*init_pos))).normalize().rotate(j + 360 / density * k) for k in range(density) for j in shift[i]])
+                case (float() | int(), list(), None):
                     arr.extend([Vector2(0, 1).rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift])
-                case (int(), tuple(), _):
-                    arr.extend([(Vector2(assignation_pos) - Vector2(init_pos)).normalize().rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift])
-                case (int(), int(), None):
+                case (float() | int(), list(), _):
+                    arr.extend([(Vector2(assign) - Vector2(normalize_coords(*init_pos))).normalize().rotate(j + 360 / density[i] * k) for k in range(density[i]) for j in shift])
+                case (float() | int(), int(), None):
                     arr.extend([Vector2(0, 1).rotate(j + 360 / density * k) for k in range(density) for j in shift])
-                case (int(), int(), _):
-                    arr.extend([(Vector2(assignation_pos) - Vector2(init_pos)).normalize().rotate(j + 360 / density * k) for k in range(density) for j in shift])
+                case (float() | int(), int(), _):
+                    arr.extend([(Vector2(assign) - Vector2(normalize_coords(*init_pos))).normalize().rotate(j + 360 / density * k) for k in range(density) for j in shift])
             for j in arr:
-                res.append(EnemyBullet("hedgehog", init_pos=init_pos, vec=j, speed=speeds[i]))
+                res.append(EnemyBullet("hedgehog", init_pos=init_pos, vec=j, vec_script=vec_script, speed=speeds[i], speed_script=speed_script))
         return res
 
-    @staticmethod
-    def wave_init(init_pos: tuple[int, int], speed: float, spread: float, init_angle: float = 0, assignation_pos: (int, int) = None):
-        return [EnemyBullet("wave", init_pos=init_pos, vec=(Vector2(assignation_pos) - Vector2(init_pos)).normalize(), speed=speed, spread=spread, init_angle=init_angle)]
-
     def hedgehog(self):
-        self.params["vec"].normalize_ip()
-        if self.key_moments:
-            if self.__lifetime < self.key_moments_keylist[0]:
-                self.true_coords += self.params["vec"] * (self.params["speed"] + self.params["init_speed_func"](self.__lifetime))
-            elif self.__lifetime > self.key_moments_keylist[-1]:
-                self.true_coords += self.params["vec"] * (self.params["speed"] + self.key_moments[self.key_moments_keylist[-1]](self.__lifetime))
+        if self.__lifetime > self.speed_script_keylist[-1]:
+            if self.__lifetime > self.vec_script_keylist[-1]:
+                self.true_coords += (self.params["vec_script"][self.vec_script_keylist[-1]](self.params["vec"], self.__lifetime).normalize()
+                                     * (self.params["speed"] + self.params["speed_script"][self.speed_script_keylist[-1]](self.__lifetime)))
             else:
-                for i in range(1, len(self.key_moments)):
-                    if self.key_moments_keylist[i - 1] < self.__lifetime < self.key_moments_keylist[i]:
-                        self.true_coords += self.params["vec"] * (self.params["speed"] + self.key_moments[self.key_moments_keylist[i-1]](self.__lifetime))
+                for j in range(1, len(self.params["vec_script"])):
+                    if self.vec_script_keylist[j - 1] < self.__lifetime < self.vec_script_keylist[j]:
+                        self.true_coords += (self.params["vec_script"][self.vec_script_keylist[j - 1]](self.params["vec"], self.__lifetime).normalize()
+                                             * (self.params["speed"] + self.params["speed_script"][self.speed_script_keylist[-1]](self.__lifetime)))
                         break
         else:
-            self.true_coords += self.params["vec"].normalize() * (self.params["speed"] + self.params["init_speed_func"](self.__lifetime))
-
-    def wave(self):
-        if self.key_moments:
-            if self.__lifetime < self.key_moments_keylist[0]:
-                self.true_coords += self.params["vec"].rotate(sin(self.__lifetime + self.params["init_angle"]) * self.params["spread"]/self.__lifetime) * (self.params["speed"] + self.params["init_speed_func"](self.__lifetime))
-            elif self.__lifetime > self.key_moments_keylist[-1]:
-                self.true_coords += self.params["vec"].rotate(sin(self.__lifetime + self.params["init_angle"]) * self.params["spread"] / self.__lifetime) * (self.params["speed"] + self.key_moments[self.key_moments_keylist[-1]](self.__lifetime))
-            else:
-                for i in range(1, len(self.key_moments)):
-                    if self.key_moments_keylist[i-1] < self.__lifetime < self.key_moments_keylist[i]:
-                        self.true_coords += self.params["vec"].rotate(sin(self.__lifetime + self.params["init_angle"]) * self.params["spread"] / self.__lifetime) * (self.params["speed"] + self.key_moments[self.key_moments_keylist[i-1]](self.__lifetime))
+            if self.__lifetime > self.vec_script_keylist[-1]:
+                for i in range(1, len(self.params["speed_script"])):
+                    if self.speed_script_keylist[i - 1] < self.__lifetime < self.speed_script_keylist[i]:
+                        self.true_coords += (self.params["vec_script"][self.vec_script_keylist[-1]](self.params["vec"], self.__lifetime).normalize()
+                                             * (self.params["speed"] + self.params["speed_script"][self.speed_script_keylist[i - 1]](self.__lifetime)))
                         break
-        else:
-            self.true_coords += self.params["vec"].rotate(sin(self.__lifetime + self.params["init_angle"]) * self.params["spread"] / self.__lifetime) * (self.params["speed"] + self.params["init_speed_func"](self.__lifetime))
-
+            else:
+                for i in range(1, len(self.params["speed_script"])):
+                    for j in range(1, len(self.params["vec_script"])):
+                        if (self.speed_script_keylist[i - 1] < self.__lifetime < self.speed_script_keylist[i]
+                                and self.vec_script_keylist[j - 1] < self.__lifetime < self.vec_script_keylist[j]):
+                            self.true_coords += (self.params["vec_script"][self.vec_script_keylist[j - 1]](self.params["vec"], self.__lifetime).normalize()\
+                                                * (self.params["speed"] + self.params["speed_script"][self.speed_script_keylist[i - 1]](self.__lifetime)))
 
     def update(self):
         match self.movement_type:
             case "hedgehog": self.hedgehog()
-            case "wave": self.wave()
         self.rect.center = self.true_coords
         if (self.rect.x >= 640 or self.rect.y >= 480) or (self.rect.x <= 230 or self.rect.y <= 0):
             self.kill()
@@ -170,7 +170,7 @@ class Player(Gameobject):
 
 
 class Enemy(Gameobject):
-    def __init__(self, movement_function: typing.Callable[[float], Vector2], speed: float, x: int, y: int):
+    def __init__(self, movement_function: Callable[[float], Vector2], speed: float, x: int, y: int):
         self.true_coords = [x, y]
         self.__lifetime = 0.1
         self.speed = speed
