@@ -29,7 +29,8 @@ while True:
                 init_pos=(192, 200),
                 density=4,
                 speeds=[3],
-                assign=plr.sprite.rect.center))
+                assign=plr.sprite.rect.center,
+                death_point=7.0))
             l = curtime
 
     enemy_bullets.draw(mainsurf)

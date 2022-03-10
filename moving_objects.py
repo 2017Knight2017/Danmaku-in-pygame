@@ -26,7 +26,7 @@ class EnemyBullet(Gameobject):
         if "speed_script" not in self.params: self.params["speed_script"] = {}
         if "vec_script" not in self.params: self.params["vec_script"] = {}
         self.params["speed_script"][0.0] = lambda x: 0
-        self.params["vec_script"][0.0] = lambda x, t: x
+        self.params["vec_script"][0.0] = lambda vec, t, pos: vec
         self.speed_script_keylist = sorted(self.params["speed_script"].keys())
         self.vec_script_keylist = sorted(self.params["vec_script"].keys())
         self.true_coords = Vector2(self.params["init_pos"])
@@ -39,7 +39,8 @@ class EnemyBullet(Gameobject):
                       speeds: list[float], shift: list[list[float]] | list[float] = [0],
                       speed_script: dict[float, Callable[[float], float]] = {},
                       vec_script: dict[float, Callable[[Vector2], Vector2]] = {},
-                      assign: tuple[int, int] = None):
+                      assign: tuple[int, int] = None,
+                      death_point: float | int = 999999):
         res = []
         for i in range(len(speeds)):
             arr = []
@@ -61,25 +62,25 @@ class EnemyBullet(Gameobject):
                 case (float() | int(), int(), _):
                     arr.extend([(Vector2(assign) - Vector2(normalize_coords(*init_pos))).normalize().rotate(j + 360 / density * k) for k in range(density) for j in shift])
             for j in arr:
-                res.append(EnemyBullet("hedgehog", init_pos=init_pos, vec=j, vec_script=vec_script, speed=speeds[i], speed_script=speed_script))
+                res.append(EnemyBullet("hedgehog", init_pos=init_pos, vec=j, vec_script=vec_script, speed=speeds[i], speed_script=speed_script, death_point=death_point))
         return res
 
     def hedgehog(self):
         if self.__lifetime > self.speed_script_keylist[-1]:
             if self.__lifetime > self.vec_script_keylist[-1]:
-                self.true_coords += (self.params["vec_script"][self.vec_script_keylist[-1]](self.params["vec"], self.__lifetime).normalize()
+                self.true_coords += (self.params["vec_script"][self.vec_script_keylist[-1]](self.params["vec"], self.__lifetime, self.rect.center).normalize()
                                      * (self.params["speed"] + self.params["speed_script"][self.speed_script_keylist[-1]](self.__lifetime)))
             else:
                 for j in range(1, len(self.params["vec_script"])):
                     if self.vec_script_keylist[j - 1] < self.__lifetime < self.vec_script_keylist[j]:
-                        self.true_coords += (self.params["vec_script"][self.vec_script_keylist[j - 1]](self.params["vec"], self.__lifetime).normalize()
+                        self.true_coords += (self.params["vec_script"][self.vec_script_keylist[j - 1]](self.params["vec"], self.__lifetime, self.rect.center).normalize()
                                              * (self.params["speed"] + self.params["speed_script"][self.speed_script_keylist[-1]](self.__lifetime)))
                         break
         else:
             if self.__lifetime > self.vec_script_keylist[-1]:
                 for i in range(1, len(self.params["speed_script"])):
                     if self.speed_script_keylist[i - 1] < self.__lifetime < self.speed_script_keylist[i]:
-                        self.true_coords += (self.params["vec_script"][self.vec_script_keylist[-1]](self.params["vec"], self.__lifetime).normalize()
+                        self.true_coords += (self.params["vec_script"][self.vec_script_keylist[-1]](self.params["vec"], self.__lifetime, self.rect.center).normalize()
                                              * (self.params["speed"] + self.params["speed_script"][self.speed_script_keylist[i - 1]](self.__lifetime)))
                         break
             else:
@@ -87,14 +88,15 @@ class EnemyBullet(Gameobject):
                     for j in range(1, len(self.params["vec_script"])):
                         if (self.speed_script_keylist[i - 1] < self.__lifetime < self.speed_script_keylist[i]
                                 and self.vec_script_keylist[j - 1] < self.__lifetime < self.vec_script_keylist[j]):
-                            self.true_coords += (self.params["vec_script"][self.vec_script_keylist[j - 1]](self.params["vec"], self.__lifetime).normalize()\
+                            self.true_coords += (self.params["vec_script"][self.vec_script_keylist[j - 1]](self.params["vec"], self.__lifetime, self.rect.center).normalize()\
                                                 * (self.params["speed"] + self.params["speed_script"][self.speed_script_keylist[i - 1]](self.__lifetime)))
 
     def update(self):
         match self.movement_type:
             case "hedgehog": self.hedgehog()
         self.rect.center = self.true_coords
-        if (self.rect.x >= 640 or self.rect.y >= 480) or (self.rect.x <= 230 or self.rect.y <= 0):
+        if ((self.rect.x >= 640 or self.rect.y >= 480) or (self.rect.x <= 230 or self.rect.y <= 0)
+                or self.__lifetime >= self.params["death_point"]):
             self.kill()
         self.__lifetime += 0.1
 
