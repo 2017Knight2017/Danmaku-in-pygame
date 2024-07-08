@@ -1,4 +1,5 @@
 from moving_objects import *
+from pattern_functions import *
 from side_bar import Sidebar
 
 
@@ -25,12 +26,11 @@ while True:
     keys = pygame.key.get_pressed()
     if keys[pygame.K_g]:
         if curtime - l > 100:
-            enemy_bullets.add(EnemyBullet.hedgehog_init(
+            enemy_bullets.add(hedgehog_formation(
                 init_pos=(192, 200),
                 density=4,
-                speeds=[3],
-                assign=plr.sprite.rect.center,
-                death_point=7.0))
+                speeds=[3,2],
+                assign=plr.sprite.rect.center))
             l = curtime
 
     enemy_bullets.draw(mainsurf)
@@ -41,9 +41,9 @@ while True:
     player_bullets.update()
     plr.draw(mainsurf)
     plr.update(player_bullets, curtime, enemy_bullets)
-    mainsurf.blits(blit_sequence=((background.surf[0], (-81, 0)),
-                                  (background.surf[1], (239, -14)),
-                                  (background.surf[1], (239, 461)),
-                                  (background.surf[0], (622, 0))))
+    #mainsurf.blits(blit_sequence=((background.surf[0], (-81, 0)),
+    #                              (background.surf[1], (239, -14)),
+    #                              (background.surf[1], (239, 461)),
+    #                              (background.surf[0], (622, 0))))
     clock.tick(FPS)
     pygame.display.update()
